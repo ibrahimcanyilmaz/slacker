@@ -229,9 +229,10 @@ func (s *Slacker) handleMessage(ctx context.Context, message *slack.MessageEvent
 
 		request := s.requestConstructor(botCtx, parameters)
 		if cmd.Definition().AuthorizationFunc != nil && !cmd.Definition().AuthorizationFunc(botCtx, request) {
-			response.ReportError(s.unAuthorizedError)
+			response.ReportError(errors.New("This command is not assigned to this channel."))
 			return
 		}
+
 
 		select {
 		case s.commandChannel <- NewCommandEvent(cmd.Usage(), parameters, message):
