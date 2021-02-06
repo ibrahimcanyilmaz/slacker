@@ -25,11 +25,13 @@ const (
 	italicMessageFormat = "_%s_"
 	quoteMessageFormat  = ">_*Example:* %s_"
 	authorizedUsersOnly = "Authorized users only"
+	definedChannelsOnly = "Defined channels only"
 	slackBotUser        = "USLACKBOT"
 )
 
 var (
-	unAuthorizedError = errors.New("You are not authorized to execute this command")
+	unAuthorizedError   = errors.New("You are not authorized to execute this command")
+	invalidChannelError = errors.New("This command is not assigned to this channel")
 )
 
 // NewClient creates a new client using the Slack API
@@ -38,10 +40,11 @@ func NewClient(token string, options ...ClientOption) *Slacker {
 
 	client := slack.New(token, slack.OptionDebug(defaults.Debug))
 	slacker := &Slacker{
-		client:            client,
-		rtm:               client.NewRTM(),
-		commandChannel:    make(chan *CommandEvent, 100),
-		unAuthorizedError: unAuthorizedError,
+		client:              client,
+		rtm:                 client.NewRTM(),
+		commandChannel:      make(chan *CommandEvent, 100),
+		unAuthorizedError:   unAuthorizedError,
+		invalidChannelError: invalidChannelError,
 	}
 	return slacker
 }
@@ -60,6 +63,7 @@ type Slacker struct {
 	defaultMessageHandler func(botCtx BotContext, request Request, response ResponseWriter)
 	defaultEventHandler   func(interface{})
 	unAuthorizedError     error
+	invalidChannelError   error
 	commandChannel        chan *CommandEvent
 }
 
@@ -111,6 +115,11 @@ func (s *Slacker) DefaultEvent(defaultEventHandler func(interface{})) {
 // UnAuthorizedError error message
 func (s *Slacker) UnAuthorizedError(unAuthorizedError error) {
 	s.unAuthorizedError = unAuthorizedError
+}
+
+// InvalidChannelError error message
+func (s *Slacker) InvalidChannelError(unAuthorizedError error) {
+	s.invalidChannelError = invalidChannelError
 }
 
 // Help handle the help message, it will use the default if not set
@@ -229,10 +238,18 @@ func (s *Slacker) handleMessage(ctx context.Context, message *slack.MessageEvent
 
 		request := s.requestConstructor(botCtx, parameters)
 		if cmd.Definition().AuthorizationFunc != nil && !cmd.Definition().AuthorizationFunc(botCtx, request) {
-			response.ReportError(errors.New("This command is not assigned to this channel."))
+			response.ReportError(s.unAuthorizedError)
 			return
 		}
-
+		channelID := botCtx.Event().Channel
+		channelInfo, err := botCtx.Client().GetConversationInfo(channelID, false)
+		if err != nil {
+			response.ReportError(err)
+		}
+		if cmd.Definition().Channels != nil && !contains(cmd.Definition().Channels, channelInfo.Name) {
+			response.ReportError(s.invalidChannelError)
+			return
+		}
 
 		select {
 		case s.commandChannel <- NewCommandEvent(cmd.Usage(), parameters, message):
@@ -252,6 +269,7 @@ func (s *Slacker) handleMessage(ctx context.Context, message *slack.MessageEvent
 
 func (s *Slacker) defaultHelp(botCtx BotContext, request Request, response ResponseWriter) {
 	authorizedCommandAvailable := false
+	channelsDefined := false
 	helpMessage := empty
 	for _, command := range s.botCommands {
 		tokens := command.Tokenize()
@@ -274,10 +292,22 @@ func (s *Slacker) defaultHelp(botCtx BotContext, request Request, response Respo
 
 		helpMessage += newLine
 
+		if command.Definition().Channels != nil {
+			channelsDefined = true
+			helpMessage += space + fmt.Sprintf(codeMessageFormat, star)
+		}
+
+		helpMessage += newLine
+
 		if len(command.Definition().Example) > 0 {
 			helpMessage += fmt.Sprintf(quoteMessageFormat, command.Definition().Example) + newLine
 		}
 	}
+
+	if channelsDefined {
+		helpMessage += fmt.Sprintf(codeMessageFormat, star+space+authorizedUsersOnly) + newLine
+	}
+	response.Reply(helpMessage)
 
 	if authorizedCommandAvailable {
 		helpMessage += fmt.Sprintf(codeMessageFormat, star+space+authorizedUsersOnly) + newLine
@@ -299,4 +329,13 @@ func (s *Slacker) prependHelpHandle() {
 	}
 
 	s.botCommands = append([]BotCommand{NewBotCommand(helpCommand, s.helpDefinition)}, s.botCommands...)
+}
+
+func contains(slice []string, element string) bool {
+	for _, value := range slice {
+		if value == element {
+			return true
+		}
+	}
+	return false
 }
