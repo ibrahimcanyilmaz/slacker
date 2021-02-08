@@ -231,7 +231,7 @@ func (s *Slacker) handleMessage(ctx context.Context, message *slack.MessageEvent
 	response := s.responseConstructor(botCtx)
 
 	for _, cmd := range s.botCommands {
-		parameters, isMatch := cmd.Match(message.Text)
+		parameters, isMatch := s.regexMatch(cmd.Usage(), message.Text)
 		if !isMatch {
 			continue
 		}
@@ -269,20 +269,17 @@ func (s *Slacker) handleMessage(ctx context.Context, message *slack.MessageEvent
 
 func (s *Slacker) defaultHelp(botCtx BotContext, request Request, response ResponseWriter) {
 	authorizedCommandAvailable := false
-	channelsDefined := false
 	helpMessage := empty
 	for _, command := range s.botCommands {
-		tokens := command.Tokenize()
-		for _, token := range tokens {
-			if token.IsParameter() {
-				helpMessage += fmt.Sprintf(codeMessageFormat, token.Word) + space
-			} else {
-				helpMessage += fmt.Sprintf(boldMessageFormat, token.Word) + space
-			}
-		}
-
+		
 		if len(command.Definition().Description) > 0 {
 			helpMessage += dash + space + fmt.Sprintf(italicMessageFormat, command.Definition().Description)
+		}
+
+		helpMessage += newLine
+
+		if len(command.Definition().Channels) > 0 {
+			helpMessage += dash + space + fmt.Sprintf(italicMessageFormat, command.Definition().Channels)
 		}
 
 		if command.Definition().AuthorizationFunc != nil {
@@ -292,22 +289,10 @@ func (s *Slacker) defaultHelp(botCtx BotContext, request Request, response Respo
 
 		helpMessage += newLine
 
-		if command.Definition().Channels != nil {
-			channelsDefined = true
-			helpMessage += space + fmt.Sprintf(codeMessageFormat, star)
-		}
-
-		helpMessage += newLine
-
 		if len(command.Definition().Example) > 0 {
 			helpMessage += fmt.Sprintf(quoteMessageFormat, command.Definition().Example) + newLine
 		}
 	}
-
-	if channelsDefined {
-		helpMessage += fmt.Sprintf(codeMessageFormat, star+space+authorizedUsersOnly) + newLine
-	}
-	response.Reply(helpMessage)
 
 	if authorizedCommandAvailable {
 		helpMessage += fmt.Sprintf(codeMessageFormat, star+space+authorizedUsersOnly) + newLine
