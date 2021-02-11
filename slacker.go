@@ -38,7 +38,7 @@ var (
 func NewClient(token string, options ...ClientOption) *Slacker {
 	defaults := newClientDefaults(options...)
 
-	client := slack.New(token, slack.OptionDebug(defaults.Debug))
+	client := slack.New(token, slack.OptionDebug(defaults.Debug), slack.OptionLog(defaults.logger))
 	slacker := &Slacker{
 		client:              client,
 		rtm:                 client.NewRTM(),
@@ -229,7 +229,7 @@ func (s *Slacker) handleMessage(ctx context.Context, message *slack.MessageEvent
 
 	botCtx := s.botContextConstructor(ctx, message, s.client, s.rtm)
 	response := s.responseConstructor(botCtx)
-
+	noMatch := true
 	for _, cmd := range s.botCommands {
 		parameters, isMatch := s.regexMatch(cmd.Usage(), message.Text)
 		if !isMatch {
@@ -241,12 +241,11 @@ func (s *Slacker) handleMessage(ctx context.Context, message *slack.MessageEvent
 			response.ReportError(s.unAuthorizedError)
 			return
 		}
-		channelID := botCtx.Event().Channel
-		channelInfo, err := botCtx.Client().GetConversationInfo(channelID, false)
+		channelName, err := botCtx.GetChannelName()
 		if err != nil {
 			response.ReportError(err)
 		}
-		if cmd.Definition().Channels != nil && !contains(cmd.Definition().Channels, channelInfo.Name) {
+		if cmd.Definition().Channels != nil && !contains(cmd.Definition().Channels, channelName) {
 			response.ReportError(s.invalidChannelError)
 			return
 		}
@@ -256,9 +255,12 @@ func (s *Slacker) handleMessage(ctx context.Context, message *slack.MessageEvent
 		default:
 			// full channel, dropped event
 		}
-
+		noMatch = false
 		cmd.Execute(botCtx, request, response)
 		return
+	}
+	if noMatch == true {
+		response.ReportError(errors.New("Invalid usage of command. (!help for more information)"))
 	}
 
 	if s.defaultMessageHandler != nil {
@@ -271,7 +273,7 @@ func (s *Slacker) defaultHelp(botCtx BotContext, request Request, response Respo
 	authorizedCommandAvailable := false
 	helpMessage := empty
 	for _, command := range s.botCommands {
-		
+
 		if len(command.Definition().Description) > 0 {
 			helpMessage += dash + space + fmt.Sprintf(italicMessageFormat, command.Definition().Description)
 		}

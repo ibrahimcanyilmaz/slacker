@@ -12,6 +12,8 @@ type BotContext interface {
 	Event() *slack.MessageEvent
 	RTM() *slack.RTM
 	Client() *slack.Client
+	GetUserName() (string, error)
+	GetChannelName() (string, error)
 }
 
 // NewBotContext creates a new bot context
@@ -44,4 +46,20 @@ func (r *botContext) RTM() *slack.RTM {
 // Client returns the slack client
 func (r *botContext) Client() *slack.Client {
 	return r.client
+}
+
+func (r *botContext) GetUserName() (string, error) {
+	u, err := r.client.GetUserInfo(r.event.User)
+	if err != nil {
+		return "", err
+	}
+	return u.Name, nil
+}
+
+func (r *botContext) GetChannelName() (string, error) {
+	c, err := r.client.GetConversationInfo(r.event.Channel, false)
+	if err != nil {
+		return "", err
+	}
+	return c.Name, nil
 }

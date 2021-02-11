@@ -12,8 +12,15 @@ func WithDebug(debug bool) ClientOption {
 	}
 }
 
+func SetLogger(l logger) ClientOption {
+	return func(defaults *ClientDefaults) {
+		defaults.logger = l
+	}
+}
+
 // ClientDefaults configuration
 type ClientDefaults struct {
+	logger logger
 	Debug bool
 }
 
