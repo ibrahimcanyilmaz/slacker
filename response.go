@@ -13,6 +13,7 @@ const (
 // A ResponseWriter interface is used to respond to an event
 type ResponseWriter interface {
 	Reply(text string, options ...ReplyOption) error
+	ReplyWithMention(text string, options ...ReplyOption) error
 	ReportError(err error, options ...ReportErrorOption)
 	Typing()
 }
@@ -76,6 +77,40 @@ func (r *response) Reply(message string, options ...ReplyOption) error {
 	_, _, err := rtm.PostMessage(
 		event.Channel,
 		slack.MsgOptionText(message, false),
+		slack.MsgOptionUser(rtm.GetInfo().User.ID),
+		slack.MsgOptionAsUser(true),
+		slack.MsgOptionAttachments(defaults.Attachments...),
+		slack.MsgOptionBlocks(defaults.Blocks...),
+	)
+	return err
+}
+
+func (r *response) ReplyWithMention(message string, options ...ReplyOption) error {
+	defaults := newReplyDefaults(options...)
+	mentionMessage := "<@%s>: " + message
+	rtm := r.botCtx.RTM()
+	event := r.botCtx.Event()
+	userID := event.User
+	if defaults.ThreadResponse {
+		threadTimestamp := event.ThreadTimestamp
+		if event.ThreadTimestamp == "" {
+			threadTimestamp = event.EventTimestamp
+		}
+		_, _, err := rtm.PostMessage(
+			event.Channel,
+			slack.MsgOptionText(fmt.Sprintf(mentionMessage, userID), false),
+			slack.MsgOptionUser(rtm.GetInfo().User.ID),
+			slack.MsgOptionAsUser(true),
+			slack.MsgOptionAttachments(defaults.Attachments...),
+			slack.MsgOptionBlocks(defaults.Blocks...),
+			slack.MsgOptionTS(threadTimestamp),
+		)
+		return err
+	}
+
+	_, _, err := rtm.PostMessage(
+		event.Channel,
+		slack.MsgOptionText(fmt.Sprintf(mentionMessage, userID), false),
 		slack.MsgOptionUser(rtm.GetInfo().User.ID),
 		slack.MsgOptionAsUser(true),
 		slack.MsgOptionAttachments(defaults.Attachments...),
