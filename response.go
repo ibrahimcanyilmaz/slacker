@@ -87,10 +87,10 @@ func (r *response) Reply(message string, options ...ReplyOption) error {
 
 func (r *response) ReplyWithMention(message string, options ...ReplyOption) error {
 	defaults := newReplyDefaults(options...)
-	mentionMessage := "<@%s>: " + message
 	rtm := r.botCtx.RTM()
 	event := r.botCtx.Event()
 	userID := event.User
+	mentionMessage := "<@" + userID + ">" + ":" + message
 	if defaults.ThreadResponse {
 		threadTimestamp := event.ThreadTimestamp
 		if event.ThreadTimestamp == "" {
@@ -98,7 +98,7 @@ func (r *response) ReplyWithMention(message string, options ...ReplyOption) erro
 		}
 		_, _, err := rtm.PostMessage(
 			event.Channel,
-			slack.MsgOptionText(fmt.Sprintf(mentionMessage, userID), false),
+			slack.MsgOptionText(mentionMessage, false),
 			slack.MsgOptionUser(rtm.GetInfo().User.ID),
 			slack.MsgOptionAsUser(true),
 			slack.MsgOptionAttachments(defaults.Attachments...),
@@ -110,7 +110,7 @@ func (r *response) ReplyWithMention(message string, options ...ReplyOption) erro
 
 	_, _, err := rtm.PostMessage(
 		event.Channel,
-		slack.MsgOptionText(fmt.Sprintf(mentionMessage, userID), false),
+		slack.MsgOptionText(mentionMessage, false),
 		slack.MsgOptionUser(rtm.GetInfo().User.ID),
 		slack.MsgOptionAsUser(true),
 		slack.MsgOptionAttachments(defaults.Attachments...),
