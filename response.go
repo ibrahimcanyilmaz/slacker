@@ -90,7 +90,7 @@ func (r *response) ReplyWithMention(message string, options ...ReplyOption) erro
 	rtm := r.botCtx.RTM()
 	event := r.botCtx.Event()
 	userID := event.User
-	mentionMessage := "<@" + userID + ">" + ":" + message
+	mentionMessage := "<@" + userID + "> " + message
 	if defaults.ThreadResponse {
 		threadTimestamp := event.ThreadTimestamp
 		if event.ThreadTimestamp == "" {
